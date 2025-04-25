@@ -3,26 +3,51 @@ import os
 import glob
 from colorama import Fore, Style, init
 init(autoreset=True)
-if os.name == 'nt':
-    from prompt_toolkit import prompt
-    from prompt_toolkit.completion import WordCompleter
+from prompt_toolkit import prompt
+from prompt_toolkit.completion import Completer, Completion
+from prompt_toolkit.history import InMemoryHistory
 
-else:
-    import readline
-    # 🔄 Tab autocomplete setup
-    def complete(text, state):
-        commands = ['cd', 'clear', 'exit', 'help', 'history']
-        matches = [cmd for cmd in commands if cmd.startswith(text)]
-        matches += glob.glob(text + '*')
-        try:
-            return matches[state]
-        except IndexError:
-            return None
+# if os.name == 'nt':
+#
+#
+# else:
+#     import readline
+#     # 🔄 Tab autocomplete setup
+#     def complete(text, state):
+#         commands = ['cd', 'clear', 'exit', 'help', 'history']
+#         matches = [cmd for cmd in commands if cmd.startswith(text)]
+#         matches += glob.glob(text + '*')
+#         try:
+#             return matches[state]
+#         except IndexError:
+#             return None
+#
+#
+#     # 🔧 Setup tab to trigger our completer
+#     readline.set_completer(complete)
+#     readline.parse_and_bind("tab: complete")
+
+class SmartCompleter(Completer):
+    def __init__(self):
+        self.commands = ['cd', 'clear', 'exit', 'help', 'history', 'ls', 'cat', 'pwd', 'echo']
 
 
-    # 🔧 Setup tab to trigger our completer
-    readline.set_completer(complete)
-    readline.parse_and_bind("tab: complete")
+    def get_completions(self, document, complete_event):
+        word = document.get_word_before_cursor()
+        matches = []
+
+        # command suggestions
+        matches += [c for c in self.commands if c.startswith(word)]
+
+        # file/folder suggestions
+        matches += glob.glob(word + '*')
+
+        for m in matches:
+            yield Completion(m, start_position=-len(word))
+
+# 🧠 Initialize completer
+completer = SmartCompleter()
+shell_history = InMemoryHistory()
 
 command_history = []
 
@@ -36,12 +61,21 @@ def welcome_banner():
     print(Fore.GREEN + "Type 'help' to see available commands!\n")
 
 
+def expand_wildcards(cmd_parts):
+    expanded = []
+    for part in cmd_parts:
+        if '*' in part:
+            expanded += glob.glob(part)
+        else:
+            expanded.append(part)
+    return expanded
+
 
 def run_shell():
     while True:
         try:
             # Show prompt
-            command = input("myShell> ").strip()
+            command = prompt("myShell> ", completer=completer, history=shell_history).strip()
 
             # Exit command
             if command.lower() == "exit":
@@ -52,6 +86,10 @@ def run_shell():
             if not command:
                 continue
             command_history.append(command)
+
+            if command.startswith("echo "):
+                print(command[5:].strip())
+                continue
 
             # Handle 'cd' manually
             if command.startswith("cd "):
@@ -106,12 +144,19 @@ def run_shell():
                 os.system("cls" if os.name == "nt" else "clear")
                 continue
 
+            if command.strip() == "ls":
+                files = os.listdir()
+                for f in files:
+                    print(f)
+                continue
+
             # Built-in command: help
             if command == "help":
                 print("""
             myShell - Available Commands:
 
             exit               : Exit the shell
+            echo               : Print on the shell
             cd [path]          : Change directory
             clear              : Clear the screen
             help               : Show this help message
@@ -127,6 +172,8 @@ def run_shell():
                     print(f"{i}: {cmd}")
                 continue
 
+            cmd_parts = command.split()
+            cmd_parts = expand_wildcards(cmd_parts)
             # Run the command
             subprocess.run(command.split())
 

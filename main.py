@@ -1,56 +1,32 @@
-import subprocess
 import os
+import subprocess
 import glob
 from colorama import Fore, Style, init
-init(autoreset=True)
 from prompt_toolkit import prompt
 from prompt_toolkit.completion import Completer, Completion
 from prompt_toolkit.history import InMemoryHistory
 
-# if os.name == 'nt':
-#
-#
-# else:
-#     import readline
-#     # 🔄 Tab autocomplete setup
-#     def complete(text, state):
-#         commands = ['cd', 'clear', 'exit', 'help', 'history']
-#         matches = [cmd for cmd in commands if cmd.startswith(text)]
-#         matches += glob.glob(text + '*')
-#         try:
-#             return matches[state]
-#         except IndexError:
-#             return None
-#
-#
-#     # 🔧 Setup tab to trigger our completer
-#     readline.set_completer(complete)
-#     readline.parse_and_bind("tab: complete")
+# Color setup
+init(autoreset=True)
 
+# Completer class for tab suggestions
 class SmartCompleter(Completer):
     def __init__(self):
-        self.commands = ['cd', 'clear', 'exit', 'help', 'history', 'ls', 'cat', 'pwd', 'echo']
-
+        self.commands = ['cd', 'clear', 'exit', 'help', 'history', 'ls', 'cat', 'pwd', 'echo', 'mkdir', 'rmdir']
 
     def get_completions(self, document, complete_event):
         word = document.get_word_before_cursor()
-        matches = []
-
-        # command suggestions
-        matches += [c for c in self.commands if c.startswith(word)]
-
-        # file/folder suggestions
+        matches = [cmd for cmd in self.commands if cmd.startswith(word)]
         matches += glob.glob(word + '*')
-
         for m in matches:
             yield Completion(m, start_position=-len(word))
 
-# 🧠 Initialize completer
+# Initialize completer and history
 completer = SmartCompleter()
 shell_history = InMemoryHistory()
-
 command_history = []
 
+# Welcome Banner
 def welcome_banner():
     print(Fore.CYAN + Style.BRIGHT + """
 ╔══════════════════════════════════════════╗
@@ -60,7 +36,7 @@ def welcome_banner():
 """)
     print(Fore.GREEN + "Type 'help' to see available commands!\n")
 
-
+# Expand wildcards (like *.py)
 def expand_wildcards(cmd_parts):
     expanded = []
     for part in cmd_parts:
@@ -70,122 +46,155 @@ def expand_wildcards(cmd_parts):
             expanded.append(part)
     return expanded
 
-
+# Main shell loop
 def run_shell():
     while True:
         try:
-            # Show prompt
             command = prompt("myShell> ", completer=completer, history=shell_history).strip()
-
-            # Exit command
-            if command.lower() == "exit":
-                print("Bye ! 👋")
-                break
-
-            # Ignore empty commands
             if not command:
                 continue
+
             command_history.append(command)
 
-            if command.startswith("echo "):
-                print(command[5:].strip())
-                continue
+            # EXIT
+            if command.lower() == "exit":
+                # Save history on exit
+                with open("history.txt", "w") as f:
+                    for cmd in command_history:
+                        f.write(cmd + "\n")
+                print(Fore.YELLOW + "Command history saved to 'history.txt'")
+                print(Fore.RED + "Bye Mowa! 👋")
+                break
 
-            # Handle 'cd' manually
+            # CD command
             if command.startswith("cd "):
                 path = command[3:].strip()
                 try:
                     os.chdir(path)
                 except FileNotFoundError:
-                    print(f"No such directory: {path}")
+                    print(Fore.RED + f"No such directory: {path}")
                 continue
 
-            # Redirection handling
-            if ">" in command:
-                cmd_parts = command.split(">")
-                cmd = cmd_parts[0].strip().split()
-                outfile = cmd_parts[1].strip()
-                with open(outfile, "w") as out:
-                    subprocess.run(cmd, stdout=out)
+            # PWD command
+            if command.strip() == "pwd":
+                print(os.getcwd())
                 continue
 
-            if "<" in command:
-                cmd_parts = command.split("<")
-                cmd = cmd_parts[0].strip().split()
-                infile = cmd_parts[1].strip()
-                with open(infile, "r") as inp:
-                    subprocess.run(cmd, stdin=inp)
+            # MKDIR command
+            if command.startswith("mkdir "):
+                folder = command[6:].strip()
+                try:
+                    os.mkdir(folder)
+                    print(Fore.GREEN + f"Directory '{folder}' created!")
+                except FileExistsError:
+                    print(Fore.RED + f"Directory '{folder}' already exists.")
                 continue
 
-            # 🧪 Handle pipe |
-            if "|" in command:
-                commands = [c.strip().split() for c in command.split("|")]
-
-                # First command
-                p1 = subprocess.Popen(commands[0], stdout=subprocess.PIPE)
-
-                # Second command takes input from first
-                p2 = subprocess.Popen(commands[1], stdin=p1.stdout)
-
-                # Close the stdout of p1 so it finishes properly
-                p1.stdout.close()
-                p2.communicate()
+            # RMDIR command
+            if command.startswith("rmdir "):
+                folder = command[6:].strip()
+                try:
+                    os.rmdir(folder)
+                    print(Fore.GREEN + f"Directory '{folder}' removed!")
+                except FileNotFoundError:
+                    print(Fore.RED + f"No such directory: {folder}")
+                except OSError:
+                    print(Fore.RED + f"Directory '{folder}' is not empty or cannot be removed.")
                 continue
 
-            # 🛠️ Handle background process with '&'
-            if command.endswith("&"):
-                cmd = command[:-1].strip().split()  # Remove '&' and split command
-                subprocess.Popen(cmd)  # Run without waiting
-                print(f"Started background job: {' '.join(cmd)}")
-                continue
-
-            # Built-in command: clear screen
-            if command == "clear":
+            # CLEAR screen
+            if command.strip() == "clear":
                 os.system("cls" if os.name == "nt" else "clear")
                 continue
 
+            # HELP
+            if command.strip() == "help":
+                print(Fore.YELLOW + """
+myShell - Available Commands:
+
+exit               : Exit the shell
+cd [path]          : Change directory
+pwd                : Print current working directory
+ls                 : List files and folders
+mkdir [name]       : Create a new directory
+rmdir [name]       : Remove an empty directory
+clear              : Clear the screen
+help               : Show help menu
+history            : Show previous commands
+>                  : Redirect output to file
+<                  : Read input from file
+|                  : Pipe output to another command
+&                  : Run command in background
+""")
+                continue
+
+            # HISTORY
+            if command.strip() == "history":
+                for i, cmd in enumerate(command_history, 1):
+                    print(f"{i}: {cmd}")
+                continue
+
+            # Handle 'ls' manually
             if command.strip() == "ls":
                 files = os.listdir()
                 for f in files:
                     print(f)
                 continue
 
-            # Built-in command: help
-            if command == "help":
-                print("""
-            myShell - Available Commands:
-
-            exit               : Exit the shell
-            echo               : Print on the shell
-            cd [path]          : Change directory
-            clear              : Clear the screen
-            help               : Show this help message
-            &                  : Run command in background (e.g., sleep 5 &)
-            >                  : Redirect output to file
-            <                  : Read input from file
-            |                  : Pipe output to another command
-            """)
+            # Handle 'echo' manually
+            if command.startswith("echo "):
+                print(command[5:].strip())
                 continue
 
-            if command == "history":
-                for i, cmd in enumerate(command_history, 1):
-                    print(f"{i}: {cmd}")
+            # Background process (&)
+            if command.endswith("&"):
+                cmd = command[:-1].strip().split()
+                cmd = expand_wildcards(cmd)
+                subprocess.Popen(cmd)
+                print(Fore.GREEN + f"Started background job: {' '.join(cmd)}")
                 continue
 
+            # Output redirection (>)
+            if ">" in command:
+                cmd_parts = command.split(">")
+                cmd = cmd_parts[0].strip().split()
+                cmd = expand_wildcards(cmd)
+                outfile = cmd_parts[1].strip()
+                with open(outfile, "w") as out:
+                    subprocess.run(cmd, stdout=out)
+                continue
+
+            # Input redirection (<)
+            if "<" in command:
+                cmd_parts = command.split("<")
+                cmd = cmd_parts[0].strip().split()
+                cmd = expand_wildcards(cmd)
+                infile = cmd_parts[1].strip()
+                with open(infile, "r") as inp:
+                    subprocess.run(cmd, stdin=inp)
+                continue
+
+            # PIPES
+            if "|" in command:
+                commands = [c.strip().split() for c in command.split("|")]
+                commands = [expand_wildcards(c) for c in commands]
+                p1 = subprocess.Popen(commands[0], stdout=subprocess.PIPE)
+                p2 = subprocess.Popen(commands[1], stdin=p1.stdout)
+                p1.stdout.close()
+                p2.communicate()
+                continue
+
+            # Normal command run
             cmd_parts = command.split()
             cmd_parts = expand_wildcards(cmd_parts)
-            # Run the command
-            subprocess.run(command.split())
+            subprocess.run(cmd_parts)
 
         except FileNotFoundError:
-            print("Command not found 🤷‍♂️")
-
+            print(Fore.RED + "Command not found 🤷‍♂️")
         except KeyboardInterrupt:
-            print("\nUse 'exit' to quit!")
-
+            print(Fore.RED + "\nUse 'exit' to quit!")
         except Exception as e:
-            print(f"Error: {e}")
-
+            print(Fore.RED + f"Error: {e}")
 
 if __name__ == "__main__":
     welcome_banner()

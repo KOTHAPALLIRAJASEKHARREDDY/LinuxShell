@@ -1,0 +1,5 @@
+ls
+help
+his
+history
+exit

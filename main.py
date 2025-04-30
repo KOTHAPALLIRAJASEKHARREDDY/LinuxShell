@@ -74,6 +74,16 @@ def run_shell():
                 print(Fore.RED + "Bye Mawa! 👋")
                 break
 
+            # background &
+            if command.endswith("&"):
+                full_cmd = command[:-1].strip()
+                cmd_parts = full_cmd.split()
+                cmd_parts = expand_wildcards(cmd_parts)
+                subprocess.Popen(cmd_parts)
+                print(Fore.GREEN + f"Started background job: {' '.join(cmd_parts)}")
+                continue
+
+
             # cd
             if command.startswith("cd "):
                 path = command[3:].strip()
@@ -163,6 +173,17 @@ clear              : Clear the screen
 """)
                 continue
 
+            # Handle !!
+            if command == "!!":
+                if len(command_history) > 1:
+                    # Use second last, because '!!' is also stored now
+                    last_command = command_history[-2]
+                    print(Fore.YELLOW + f"Repeating: {last_command}")
+                    command = last_command
+                else:
+                    print(Fore.RED + "No previous command found.")
+                    continue
+
             # history
             if command.strip() == "history":
                 for i, cmd in enumerate(command_history, 1):
@@ -220,13 +241,6 @@ clear              : Clear the screen
                 print(f"Shell running for {mins} minutes {secs} seconds")
                 continue
 
-            # background &
-            if command.endswith("&"):
-                cmd = command[:-1].strip().split()
-                cmd = expand_wildcards(cmd)
-                subprocess.Popen(cmd)
-                print(Fore.GREEN + f"Started background job: {' '.join(cmd)}")
-                continue
 
             # redirection > and <
             if ">" in command:
